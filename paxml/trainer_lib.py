@@ -1008,11 +1008,22 @@ def train_step_single_learner(
     wps_with_opt = tasks_lib.filter_vars_for_grad_or_opt(
         var_weight_hparams, excluded_for_opt
     )
+    non_fp8_grads = tasks_lib.filter_vars_for_grad_or_opt(
+        grads, excluded_for_opt
+    )
     transformed_grads, new_opt_states = learner.update_states(
-        grads, states.opt_states[0], vars_with_opt, wps_with_opt
+        non_fp8_grads, states.opt_states[0], vars_with_opt, wps_with_opt
     )
     vars_with_opt = learner.apply_gradient(
         vars_with_opt, transformed_grads, wps_with_opt
+    )
+    # Add back the grads of fp8 to the vars_with_opt to make sure it has the
+    # same structure of mdl_vars
+    vars_with_opt = jax.tree_map(
+        lambda e, old, new: old if e else new,
+        excluded_for_opt,
+        grads,
+        vars_with_opt,
     )
     mdl_vars = jax.tree_map(
         lambda e, old, new: old if e else new,
