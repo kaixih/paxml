@@ -823,6 +823,14 @@ def get_excluded_var_mask_for_opt(
   )
 
 
+def get_fp8_var_mask(
+    var_weight_hparams: NestedJTensor,
+) -> NestedMap:
+  """Returns whether each var is for fp8 bookkeeping."""
+  return jax.tree_util.tree_map(lambda x: base_layer.var_fp8(x),
+                                var_weight_hparams)
+
+
 def get_excluded_var_mask_for_grad(
     var_weight_hparams: NestedJTensor,
     learner: learners_lib.Learner,
