@@ -33,10 +33,9 @@ from praxis import py_utils
 from praxis import schedules
 from praxis.layers import activations
 from praxis.layers import embedding_softmax
+from praxis.layers import fp8_ops
 from praxis.layers import models
 from praxis.layers import transformer_models
-
-import fp8layers.praxis as fp8
 
 NestedMap = py_utils.NestedMap
 WeightInit = base_layer.WeightInit
@@ -624,11 +623,11 @@ class TransformerLmSpmdAdafactor(base_experiment.BaseExperiment):
 
     if self.USE_FP8:
       transformer_layer_p.tr_atten_tpl.proj_tpl.einsum_tpl = \
-          pax_fiddle.Config(fp8.Fp8EinsumOp)
+          pax_fiddle.Config(fp8_ops.Fp8EinsumOp)
       transformer_layer_p.tr_atten_tpl.combined_qkv_proj_tpl.einsum_tpl = \
-          pax_fiddle.Config(fp8.Fp8EinsumOp)
+          pax_fiddle.Config(fp8_ops.Fp8EinsumOp)
       transformer_layer_p.tr_fflayer_tpl.fflayer_tpl.linear_tpl.einsum_tpl = \
-          pax_fiddle.Config(fp8.Fp8EinsumOp)
+          pax_fiddle.Config(fp8_ops.Fp8EinsumOp)
 
     transformer_layer_p.tr_fflayer_tpl.activation_tpl = pax_fiddle.Config(
         self.ACTIVATION_CLS
