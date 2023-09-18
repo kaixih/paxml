@@ -688,6 +688,10 @@ def _maybe_synchronize_non_learnable_vars(
       return output
     elif base_layer.var_requires_sum_sync(var_param):
       return _synchronize_vars_using_sum(old_var, new_var)
+    elif base_layer.var_fp8(var_param):
+      # For fp8 params, we simply skip this process since the updating will be
+      # conducted separately.
+      return old_var
     else:
       raise ValueError(
           'Non-trainable variables must have a cross-replica '
@@ -1067,6 +1071,13 @@ def train_step_single_learner(
   excluded_for_grad = tasks_lib.get_excluded_var_mask_for_grad(
       var_weight_hparams, learner
   )
+  fp8_var_mask = tasks_lib.get_fp8_var_mask(var_weight_hparams)
+  excluded_for_grad = jax.tree_map(
+      lambda old, is_fp8: (not is_fp8 and old),
+      excluded_for_grad,
+      fp8_var_mask,
+  )
+
   _log_bprop_include_exclude_list(var_weight_hparams, excluded_for_grad)
 
   # Excluded for optimizer states.
@@ -1132,7 +1143,6 @@ def train_step_single_learner(
     )
     # Updating fp8_params is special: the new values are simply their grads. So,
     # we exclude their grads in the optimizer update.
-    fp8_var_mask = tasks_lib.get_fp8_var_mask(var_weight_hparams)
     non_fp8_grads = tasks_lib.filter_vars_for_grad_or_opt(
         grads, fp8_var_mask
     )
@@ -1148,13 +1158,6 @@ def train_step_single_learner(
         mdl_vars,
         vars_with_opt,
     )
-    # Replace old fp8 params with their grads.
-    mdl_vars = jax.tree_map(
-        lambda e, new, old: new if e else old,
-        fp8_var_mask,
-        grads,
-        mdl_vars,
-    )
 
     for collection in [NON_TRAINABLE] + NON_PAX_VAR_COLLECTION:
       if collection in states.mdl_vars:
@@ -1167,6 +1170,15 @@ def train_step_single_learner(
             fwd_updated_vars[collection],
             var_weight_hparams[collection],
         )
+
+    # Replace old fp8 params with their grads. Note, this has to be done after
+    # the above loop, which will otherwise overwrite this update.
+    mdl_vars = jax.tree_map(
+        lambda e, new, old: new if e else old,
+        fp8_var_mask,
+        grads,
+        mdl_vars,
+    )
 
     # We may have updated non-trainable vars that have been explicitly excluded.
     mdl_vars = jax.tree_map(

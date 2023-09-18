@@ -54,6 +54,7 @@ PMAP_PARALLEL_AXIS_NAME = base_layer.PMAP_PARALLEL_AXIS_NAME
 
 RANDOM = base_layer.RANDOM
 PARAMS = base_layer.PARAMS
+NON_TRAINABLE = base_layer.NON_TRAINABLE
 
 instantiate = base_hyperparams.instantiate
 
@@ -218,6 +219,7 @@ class TestModel04(base_model.BaseModel):
     self.create_variable(
         'fp8_var',
         base_layer.WeightHParams(shape=[1], collections=['fp8_params']),
+        trainable=False,
     )
 
   def compute_predictions(self, input_batch: NestedMap) -> JTensor:
@@ -225,7 +227,7 @@ class TestModel04(base_model.BaseModel):
     # gradient. Then, we can check if the gradient is used to update the old
     # fp8_var by simple replacing.
     ret = jnp.einsum('bi,io->bo', input_batch.inputs, self.theta.var01) + \
-          input_batch.inputs[0][0] * self.theta.fp8_var[0]
+          input_batch.inputs[0][0] * self.get_var('fp8_var')[0]
     return ret
 
   def compute_loss(
@@ -456,7 +458,8 @@ class BaseTaskTest(test_utils.TestCase):
       replicated_mdl_states, _ = p_train_step(
           replicated_mdl_states, train_prng_key, mdl_inputs
       )
-      new_fp8_param = replicated_mdl_states.mdl_vars[PARAMS]['fp8_var'][0]
+      new_fp8_param = \
+          replicated_mdl_states.mdl_vars[NON_TRAINABLE]['fp8_var'][0]
       expected = np.mean(mdl_inputs.inputs[:, 0, 0]) * batch_size * output_dims
       self.assertAllClose(new_fp8_param, expected)
 
